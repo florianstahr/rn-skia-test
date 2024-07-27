@@ -1,0 +1,445 @@
+diff --git a/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkDomView.cpp b/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkDomView.cpp
+index 60c9b62..7eca004 100644
+--- a/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkDomView.cpp
++++ b/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkDomView.cpp
+@@ -53,6 +53,10 @@ bool RNSkDomRenderer::tryRender(
+ 
+ void RNSkDomRenderer::renderImmediate(
+     std::shared_ptr<RNSkCanvasProvider> canvasProvider) {
++     #if SKIA_DOM_DEBUG_VERBOSE
++                  printDebugInfo("RNSkDomRenderer::renderImmediate");
++        #endif
++        printf("RNSkDomRenderer::renderImmediate\n");
+   auto prevDebugOverlay = getShowDebugOverlays();
+   setShowDebugOverlays(false);
+   canvasProvider->renderToCanvas(std::bind(
+@@ -63,7 +67,15 @@ void RNSkDomRenderer::renderImmediate(
+ 
+ void RNSkDomRenderer::setRoot(std::shared_ptr<JsiDomRenderNode> node) {
+   std::lock_guard<std::mutex> lock(_rootLock);
++  printf("RNSkDomRenderer::setRoot 1\n");
++  if (_root == nullptr) {
++    printf("RNSkDomRenderer::setRoot 1 root === nullptr\n");
++  }
++  if (node == nullptr) {
++    printf("RNSkDomRenderer::setRoot 1 node === nullptr\n");
++  }
+   if (_root != nullptr) {
++  printf("RNSkDomRenderer::renderCanvas 2\n");
+     _root->dispose(true);
+     _root = nullptr;
+   }
+@@ -77,6 +89,7 @@ void RNSkDomRenderer::setOnTouchCallback(
+ 
+ void RNSkDomRenderer::renderCanvas(SkCanvas *canvas, float scaledWidth,
+                                    float scaledHeight) {
++                                   printf("RNSkDomRenderer::renderCanvas 1\n");
+   _renderTimingInfo.beginTiming();
+ 
+   auto pd = _platformContext->getPixelDensity();
+@@ -84,27 +97,38 @@ void RNSkDomRenderer::renderCanvas(SkCanvas *canvas, float scaledWidth,
+   canvas->save();
+   canvas->scale(pd, pd);
+ 
++  printf("RNSkDomRenderer::renderCanvas 2\n");
++
+   if (_drawingContext == nullptr) {
++  printf("RNSkDomRenderer::renderCanvas 3\n");
+     _drawingContext = std::make_shared<DrawingContext>();
+ 
+     _drawingContext->setRequestRedraw([weakSelf = weak_from_this()]() {
+       auto self = weakSelf.lock();
+       if (self) {
++      printf("RNSkDomRenderer::renderCanvas 4\n");
+         self->_requestRedraw();
+       }
+     });
+   }
+ 
++  printf("RNSkDomRenderer::renderCanvas 5\n");
++
+   _drawingContext->setScaledWidth(scaledWidth);
+   _drawingContext->setScaledHeight(scaledHeight);
+ 
+   // Update canvas before drawing
+   _drawingContext->setCanvas(canvas);
+ 
++  if (_root == nullptr) {
++  printf("RNSkDomRenderer::renderCanvas 8 root == nullptr\n");
++  }
++
+   try {
+     // Ask the root node to render to the provided canvas
+     std::lock_guard<std::mutex> lock(_rootLock);
+     if (_root != nullptr) {
++    printf("RNSkDomRenderer::renderCanvas 6\n");
+       _root->commitPendingChanges();
+       _root->render(_drawingContext.get());
+       _root->resetPendingChanges();
+@@ -123,6 +147,7 @@ void RNSkDomRenderer::renderCanvas(SkCanvas *canvas, float scaledWidth,
+   canvas->restore();
+ 
+   _renderTimingInfo.stopTiming();
++  printf("RNSkDomRenderer::renderCanvas 7\n");
+ }
+ 
+ void RNSkDomRenderer::updateTouches(std::vector<RNSkTouchInfo> &touches) {
+diff --git a/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkDomView.h b/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkDomView.h
+index 27bb747..f32a411 100644
+--- a/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkDomView.h
++++ b/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkDomView.h
+@@ -121,11 +121,14 @@ public:
+         requestRedraw();
+ 
+       } else if (prop.first == "root") {
++      printf("RNSkDomView::setJsiProperties root 1\n");
+         // Save root
+         if (prop.second.isUndefined() || prop.second.isNull()) {
++        printf("RNSkDomView::setJsiProperties root 1 second isUndefinedOrNull\n");
+           std::static_pointer_cast<RNSkDomRenderer>(getRenderer())
+               ->setRoot(nullptr);
+         } else {
++        printf("RNSkDomView::setJsiProperties root 1 second getAsHostObject\n");
+           std::static_pointer_cast<RNSkDomRenderer>(getRenderer())
+               ->setRoot(std::dynamic_pointer_cast<JsiDomRenderNode>(
+                   prop.second.getAsHostObject()));
+diff --git a/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkJsiViewApi.h b/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkJsiViewApi.h
+index c1f920e..894fe1a 100644
+--- a/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkJsiViewApi.h
++++ b/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkJsiViewApi.h
+@@ -32,7 +32,9 @@ public:
+    view when needed.
+    */
+   JSI_HOST_FUNCTION(setJsiProperty) {
++    printf("RNSkJsiViewApi::setJsiProperty 1\n");
+     if (count != 3) {
++    printf("RNSkJsiViewApi::setJsiProperty 2\n");
+       _platformContext->raiseError(
+           std::string("setJsiProperty: Expected 3 arguments, got " +
+                       std::to_string(count) + "."));
+@@ -40,18 +42,24 @@ public:
+     }
+ 
+     if (!arguments[0].isNumber()) {
++    printf("RNSkJsiViewApi::setJsiProperty 3\n");
+       _platformContext->raiseError(
+           "setJsiProperty: First argument must be a number");
+       return jsi::Value::undefined();
+     }
+ 
++    printf("RNSkJsiViewApi::setJsiProperty 4\n");
++
+     if (!arguments[1].isString()) {
++    printf("RNSkJsiViewApi::setJsiProperty 5\n");
+       _platformContext->raiseError("setJsiProperty: Second argument must be "
+                                    "the name of the property to set.");
+ 
+       return jsi::Value::undefined();
+     }
+ 
++    printf("RNSkJsiViewApi::setJsiProperty 6\n");
++
+     auto nativeId = arguments[0].asNumber();
+     std::lock_guard<std::mutex> lock(_mutex);
+     auto info = getEnsuredViewInfo(nativeId);
+@@ -59,14 +67,20 @@ public:
+     info->props.insert_or_assign(arguments[1].asString(runtime).utf8(runtime),
+                                  RNJsi::JsiValueWrapper(runtime, arguments[2]));
+ 
++    printf("RNSkJsiViewApi::setJsiProperty 7\n");
++
+     // Now let's see if we have a view that we can update
+     if (info->view != nullptr) {
++    printf("RNSkJsiViewApi::setJsiProperty 8\n");
+       // Update view!
+       info->view->setNativeId(nativeId);
+       info->view->setJsiProperties(info->props);
++      printf("RNSkJsiViewApi::setJsiProperty props.clear()\n");
+       info->props.clear();
+     }
+ 
++    printf("RNSkJsiViewApi::setJsiProperty 9\n");
++
+     return jsi::Value::undefined();
+   }
+ 
+@@ -207,6 +221,7 @@ public:
+   void unregisterAll() {
+     std::lock_guard<std::mutex> lock(_mutex);
+     _viewInfos.clear();
++    printf("RNSkJsiViewApi::unregisterAll 1\n");
+   }
+ 
+   /**
+@@ -215,11 +230,16 @@ public:
+    * @param view View to register
+    */
+   void registerSkiaView(size_t nativeId, std::shared_ptr<RNSkView> view) {
++  printf("RNSkJsiViewApi::registerSkiaView 1\n");
++  if (view == nullptr) {
++    printf("RNSkJsiViewApi::registerSkiaView 2\n");
++  }
+     std::lock_guard<std::mutex> lock(_mutex);
+     auto info = getEnsuredViewInfo(nativeId);
+     info->view = view;
+     info->view->setNativeId(nativeId);
+     info->view->setJsiProperties(info->props);
++    printf("RNSkJsiViewApi::registerSkiaView props.clear()\n");
+     info->props.clear();
+   }
+ 
+@@ -228,6 +248,7 @@ public:
+    * @param nativeId View id
+    */
+   void unregisterSkiaView(size_t nativeId) {
++  printf("RNSkJsiViewApi::unregisterSkiaView 2\n");
+     std::lock_guard<std::mutex> lock(_mutex);
+     if (_viewInfos.count(nativeId) == 0) {
+       return;
+@@ -246,16 +267,31 @@ public:
+    */
+   void setSkiaView(size_t nativeId, std::shared_ptr<RNSkView> view) {
+     std::lock_guard<std::mutex> lock(_mutex);
++    printf("RNSkJsiViewApi::setSkiaView 1\n");
+     if (_viewInfos.find(nativeId) == _viewInfos.end()) {
++    printf("RNSkJsiViewApi::setSkiaView 2\n");
+       return;
++    }
++    printf("RNSkJsiViewApi::setSkiaView 3\n");
++    if (view == nullptr) {
++    printf("RNSkJsiViewApi::setSkiaView 4\n");
++
+     }
+     auto info = getEnsuredViewInfo(nativeId);
+     if (view != nullptr) {
++        printf("RNSkJsiViewApi::setSkiaView 5\n");
+       info->view = view;
++        if (info->view == nullptr) {
++            printf("RNSkJsiViewApi::setSkiaView 6\n");
++        }
+       info->view->setNativeId(nativeId);
++        printf("RNSkJsiViewApi::setSkiaView 7\n");
+       info->view->setJsiProperties(info->props);
++        printf("RNSkJsiViewApi::setSkiaView 8\n");
++        printf("RNSkJsiViewApi::setSkiaView props.clear()\n");
+       info->props.clear();
+     } else if (view == nullptr) {
++        printf("RNSkJsiViewApi::setSkiaView 9\n");
+       info->view = view;
+     }
+   }
+@@ -268,6 +304,7 @@ private:
+    */
+   RNSkViewInfo *getEnsuredViewInfo(size_t nativeId) {
+     if (_viewInfos.count(nativeId) == 0) {
++    printf("RNSkJsiViewApi::getEnsuredViewInfo 1 new\n");
+       RNSkViewInfo info;
+       _viewInfos.emplace(nativeId, info);
+     }
+diff --git a/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkView.h b/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkView.h
+index 90c46f4..f3ab85e 100644
+--- a/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkView.h
++++ b/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkView.h
+@@ -185,6 +185,10 @@ public:
+    than the UI thread
+    */
+   void renderImmediate() {
++     #if SKIA_DOM_DEBUG_VERBOSE
++                  printDebugInfo("RNSkView::renderImmediate");
++        #endif
++        printf("RNSkView::renderImmediate\n");
+     _renderer->renderImmediate(_canvasProvider);
+     _redrawRequestCounter = 0;
+   }
+@@ -265,9 +269,16 @@ private:
+    Starts beginDrawCallback loop if the drawing mode is continuous
+    */
+   void beginDrawingLoop() {
++  #if SKIA_DOM_DEBUG_VERBOSE
++                    printDebugInfo("RNSkDomRenderer::beginDrawingLoop 1");
++          #endif
++
+     if (_drawingLoopId != 0 || _nativeId == 0) {
+       return;
+     }
++    #if SKIA_DOM_DEBUG_VERBOSE
++              printDebugInfo("RNSkView::beginDrawingLoop 2");
++    #endif
+     // Set to zero to avoid calling beginDrawLoop before we return
+     _drawingLoopId = _platformContext->beginDrawLoop(
+         _nativeId, [weakSelf = weak_from_this()](bool invalidated) {
+@@ -286,6 +297,10 @@ private:
+         _drawingMode == RNSkDrawingMode::Continuous) {
+       _redrawRequestCounter = 0;
+ 
++      #if SKIA_DOM_DEBUG_VERBOSE
++                    printDebugInfo("RNSkView::drawLoopCallback");
++          #endif
++
+       if (!_renderer->tryRender(_canvasProvider)) {
+         // The renderer could not render cause it was busy, just schedule
+         // redrawing on the next frame.
+diff --git a/node_modules/@shopify/react-native-skia/cpp/rnskia/dom/JsiDomApi.h b/node_modules/@shopify/react-native-skia/cpp/rnskia/dom/JsiDomApi.h
+index 7bc4200..b6d97ab 100644
+--- a/node_modules/@shopify/react-native-skia/cpp/rnskia/dom/JsiDomApi.h
++++ b/node_modules/@shopify/react-native-skia/cpp/rnskia/dom/JsiDomApi.h
+@@ -1,8 +1,8 @@
+ #pragma once
+ 
+ /* Enable output of dom trees and paint contexts */
+-#define SKIA_DOM_DEBUG 0
+-#define SKIA_DOM_DEBUG_VERBOSE 0
++#define SKIA_DOM_DEBUG 1
++#define SKIA_DOM_DEBUG_VERBOSE 1
+ 
+ #include <memory>
+ 
+diff --git a/node_modules/@shopify/react-native-skia/ios/RNSkia-iOS/SkiaDomView.mm b/node_modules/@shopify/react-native-skia/ios/RNSkia-iOS/SkiaDomView.mm
+index a8b95aa..a41e891 100644
+--- a/node_modules/@shopify/react-native-skia/ios/RNSkia-iOS/SkiaDomView.mm
++++ b/node_modules/@shopify/react-native-skia/ios/RNSkia-iOS/SkiaDomView.mm
+@@ -50,6 +50,7 @@ - (void)updateProps:(const Props::Shared &)props
+   [super updateProps:props oldProps:oldProps];
+   int nativeId =
+       [[RCTConvert NSString:RCTNSStringFromString(newProps.nativeId)] intValue];
++    NSLog(@"SkiaDomView updateProps nativeId new: %s converted: %d", newProps.nativeId.c_str(), nativeId);
+   [self setNativeId:nativeId];
+   [self setDrawingMode:newProps.mode];
+   [self setDebugMode:newProps.debug];
+diff --git a/node_modules/@shopify/react-native-skia/ios/RNSkia-iOS/SkiaUIView.mm b/node_modules/@shopify/react-native-skia/ios/RNSkia-iOS/SkiaUIView.mm
+index 4c08280..171e14c 100644
+--- a/node_modules/@shopify/react-native-skia/ios/RNSkia-iOS/SkiaUIView.mm
++++ b/node_modules/@shopify/react-native-skia/ios/RNSkia-iOS/SkiaUIView.mm
+@@ -63,6 +63,7 @@ - (void)willInvalidateModules {
+ #pragma mark Lifecycle
+ 
+ - (void)willMoveToSuperview:(UIView *)newWindow {
++    NSLog(@"SkiaUIView willMoveToSuperview a %d %d %d %d", newWindow ? 1 : 0, _impl ? 1 : 0, _manager ? 1 : 0, _nativeId);
+   if (newWindow == NULL) {
+     // Remove implementation view when the parent view is not set
+     if (_impl != nullptr) {
+@@ -90,6 +91,8 @@ - (void)willMoveToSuperview:(UIView *)newWindow {
+       _impl->getDrawView()->setShowDebugOverlays(_debugMode);
+     }
+   }
++
++  NSLog(@"SkiaUIView willMoveToSuperview b %d %d %d %d", newWindow ? 1 : 0, _impl ? 1 : 0, _manager ? 1 : 0, _nativeId);
+ }
+ 
+ - (void)dealloc {
+@@ -130,8 +133,11 @@ - (void)unregisterView {
+ - (void)drawRect:(CGRect)rect {
+   // We override drawRect to ensure we to direct rendering when the
+   // underlying OS view needs to render:
++  NSLog(@"SkiaUIView drawRect 1 before _impl != nullptr");
+   if (_impl != nullptr) {
++  NSLog(@"SkiaUIView drawRect 2 before _impl->getDrawView()->renderImmediate()");
+     _impl->getDrawView()->renderImmediate();
++    NSLog(@"SkiaUIView drawRect 3 after _impl->getDrawView()->renderImmediate()");
+   }
+ }
+ 
+diff --git a/node_modules/@shopify/react-native-skia/scripts/setup-canvaskit.js b/node_modules/@shopify/react-native-skia/scripts/setup-canvaskit.js
+old mode 100755
+new mode 100644
+diff --git a/node_modules/@shopify/react-native-skia/src/views/SkiaDomView.tsx b/node_modules/@shopify/react-native-skia/src/views/SkiaDomView.tsx
+index 25d0787..e875496 100644
+--- a/node_modules/@shopify/react-native-skia/src/views/SkiaDomView.tsx
++++ b/node_modules/@shopify/react-native-skia/src/views/SkiaDomView.tsx
+@@ -16,25 +16,31 @@ const NativeSkiaDomView: HostComponent<SkiaDomViewProps> =
+       (null as any);
+ 
+ export class SkiaDomView extends React.Component<SkiaDomViewProps> {
++  private _setJsiPropertiesInComponentDidMount = false;
++
+   constructor(props: SkiaDomViewProps) {
+     super(props);
+     this._nativeId = SkiaViewNativeId.current++;
+     const { root, onTouch, onSize } = props;
+-    if (root) {
+-      assertSkiaViewApi();
+-      SkiaViewApi.setJsiProperty(this._nativeId, "root", root);
+-    }
+-    if (onTouch) {
+-      assertSkiaViewApi();
+-      console.warn(
+-        `The onTouch property is deprecated and will be removed in the next Skia release.
++    if (!this._setJsiPropertiesInComponentDidMount) {
++      if (root) {
++        assertSkiaViewApi();
++        console.log('SkiaDomView constructor set root view before');
++        SkiaViewApi.setJsiProperty(this._nativeId, "root", root);
++        console.log('SkiaDomView constructor set root view after');
++      }
++      if (onTouch) {
++        assertSkiaViewApi();
++        console.warn(
++          `The onTouch property is deprecated and will be removed in the next Skia release.
+ See: https://shopify.github.io/react-native-skia/docs/animations/gestures`
+-      );
+-      SkiaViewApi.setJsiProperty(this._nativeId, "onTouch", onTouch);
+-    }
+-    if (onSize) {
+-      assertSkiaViewApi();
+-      SkiaViewApi.setJsiProperty(this._nativeId, "onSize", onSize);
++        );
++        SkiaViewApi.setJsiProperty(this._nativeId, "onTouch", onTouch);
++      }
++      if (onSize) {
++        assertSkiaViewApi();
++        SkiaViewApi.setJsiProperty(this._nativeId, "onSize", onSize);
++      }
+     }
+   }
+ 
+@@ -47,8 +53,10 @@ See: https://shopify.github.io/react-native-skia/docs/animations/gestures`
+   componentDidUpdate(prevProps: SkiaDomViewProps) {
+     const { root, onTouch, onSize } = this.props;
+     if (root !== prevProps.root) {
++      console.log('SkiaDOMView didUpdate root before', !!root);
+       assertSkiaViewApi();
+       SkiaViewApi.setJsiProperty(this._nativeId, "root", root);
++      console.log('SkiaDOMView didUpdate root after', !!root);
+     }
+     if (onTouch !== prevProps.onTouch) {
+       assertSkiaViewApi();
+@@ -93,11 +101,39 @@ See: https://shopify.github.io/react-native-skia/docs/animations/gestures`
+    */
+   componentWillUnmount(): void {
+     assertSkiaViewApi();
++    console.log('SkiaDomView willUnmount set root null before');
+     SkiaViewApi.setJsiProperty(this._nativeId, "root", null);
++    console.log('SkiaDomView willUnmount set root null after');
++  }
++
++  componentDidMount() {
++    console.log('SkiaDomView didMount');
++    const { root, onTouch, onSize } = this.props;
++    if (this._setJsiPropertiesInComponentDidMount) {
++      if (root) {
++        assertSkiaViewApi();
++        console.log('SkiaDomView didMount set root view before');
++        SkiaViewApi.setJsiProperty(this._nativeId, "root", root);
++        console.log('SkiaDomView didMount set root view after');
++      }
++      if (onTouch) {
++        assertSkiaViewApi();
++        console.warn(
++          `The onTouch property is deprecated and will be removed in the next Skia release.
++See: https://shopify.github.io/react-native-skia/docs/animations/gestures`
++        );
++        SkiaViewApi.setJsiProperty(this._nativeId, "onTouch", onTouch);
++      }
++      if (onSize) {
++        assertSkiaViewApi();
++        SkiaViewApi.setJsiProperty(this._nativeId, "onSize", onSize);
++      }
++    }
+   }
+ 
+   render() {
+     const { mode, debug = false, ...viewProps } = this.props;
++    console.log('SkiaDomView rerender');
+     return (
+       <NativeSkiaDomView
+         collapsable={false}
